@@ -4,20 +4,17 @@ import {exec} from '@actions/exec'
 import {create, UploadOptions} from '@actions/artifact'
 
 async function run(): Promise<void> {
-  const payload = core.getInput('payload')
+  const service = core.getInput('service')
+  const version = core.getInput('version')
+  const pluginSha = core.getInput('plugin_sha')
 
   try {
     const initGradle = `
-import groovy.json.JsonSlurper
-
 allprojects { project ->
-  def versions = new JsonSlurper().parseText("""${payload}""")
   project.afterEvaluate {
     def spinnakerPlugin = project.extensions.findByName("spinnakerPlugin")
-    if (spinnakerPlugin != null && versions[spinnakerPlugin.serviceName] != null) {
-      def service = spinnakerPlugin.serviceName
-      def serviceVersion = versions[spinnakerPlugin.serviceName]
-      def platform = project.dependencies.platform("com.netflix.spinnaker.\${service}:\${service}-bom:$serviceVersion") {
+    if (spinnakerPlugin?.serviceName == "${service}") {
+      def platform = project.dependencies.platform("com.netflix.spinnaker.${service}:${service}-bom:${version}") {
         force = true
       }
       project.dependencies.add("testRuntime", platform)
@@ -25,6 +22,7 @@ allprojects { project ->
   }
 }
 `
+    core.info(`script:\n${initGradle}`)
     fs.writeFileSync('init.gradle', initGradle)
     const command = `./gradlew -I init.gradle test`
     core.info(`Running command: ${command}`)
@@ -34,7 +32,12 @@ allprojects { project ->
   }
 
   const runID = process.env['GITHUB_RUN_ID']
-  const encodedPayload = Buffer.from(payload).toString('base64')
+  const payload = {
+    service,
+    version,
+    sha: pluginSha
+  };
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64')
   const artifactName = `compat-${runID}-${encodedPayload}`
   if (core.getInput('skip_upload') !== 'true') {
     try {
@@ -49,7 +52,7 @@ allprojects { project ->
     }
   } else {
     core.info('Not in a CI environment')
-    core.info(`Raw payload is ${payload}`)
+    core.info(`Raw payload is: \n${JSON.stringify(payload, null, 2)}`)
     core.info(`Would have uploaded a artifact with the name '${artifactName}'`)
   }
 }

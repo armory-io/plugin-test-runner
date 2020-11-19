@@ -2,8 +2,10 @@ name: 'Spinnaker Compatibility Test Runner'
 description: 'Action for running Spinnaker compatibility tests'
 author: 'Armory'
 inputs:
-  payload: 
-    description: spinnaker versions payload
+  service: 
+    description: service to test
+  version: 
+    description: version to test
   skip_upload:
     default: false
 runs:

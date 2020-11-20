@@ -6,6 +6,8 @@ inputs:
     description: service to test
   version: 
     description: version to test
+  plugin_sha: 
+    description: plugin commit to test
   skip_upload:
     default: false
 runs:

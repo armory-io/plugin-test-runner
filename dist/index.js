@@ -725,6 +725,10 @@ function run() {
         const service = core.getInput('service');
         const version = core.getInput('version');
         const pluginSha = core.getInput('plugin_sha');
+        core.info("Received inputs:");
+        core.info(`service=${service}`);
+        core.info(`version=${version}`);
+        core.info(`plugin_sha=${pluginSha}`);
         try {
             const initGradle = `
 allprojects { project ->
@@ -739,7 +743,7 @@ allprojects { project ->
   }
 }
 `;
-            core.info(`script:\n${initGradle}`);
+            core.info(`Gradle init script:\n${initGradle}`);
             fs.writeFileSync('init.gradle', initGradle);
             const command = `./gradlew -I init.gradle test`;
             core.info(`Running command: ${command}`);

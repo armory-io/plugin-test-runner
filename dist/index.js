@@ -725,7 +725,7 @@ function run() {
         const service = core.getInput('service');
         const version = core.getInput('version');
         const pluginSha = core.getInput('plugin_sha');
-        core.info("Received inputs:");
+        core.info('Received inputs:');
         core.info(`service=${service}`);
         core.info(`version=${version}`);
         core.info(`plugin_sha=${pluginSha}`);
@@ -739,6 +739,9 @@ allprojects { project ->
         force = true
       }
       project.dependencies.add("testRuntime", platform)
+      project.repositories {
+        maven { url "https://spinnaker-releases.bintray.com/jars" }
+      }
     }
   }
 }

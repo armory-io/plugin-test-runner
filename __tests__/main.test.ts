@@ -6,7 +6,7 @@ import * as fs from 'fs'
 
 test('run compatibility test', () => {
   process.env['INPUT_SERVICE'] = 'clouddriver'
-  process.env['INPUT_VERSION'] = '5.69.0'
+  process.env['INPUT_VERSION'] = '7.0.0-20201014125147'
   process.env['INPUT_PLUGIN_SHA'] = '12345abcdef'
   process.env['INPUT_SKIP_UPLOAD'] = 'true'
   process.env['GITHUB_RUN_ID'] = '12345'

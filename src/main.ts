@@ -8,7 +8,7 @@ async function run(): Promise<void> {
   const version = core.getInput('version')
   const pluginSha = core.getInput('plugin_sha')
 
-  core.info("Received inputs:")
+  core.info('Received inputs:')
   core.info(`service=${service}`)
   core.info(`version=${version}`)
   core.info(`plugin_sha=${pluginSha}`)
@@ -23,6 +23,9 @@ allprojects { project ->
         force = true
       }
       project.dependencies.add("testRuntime", platform)
+      project.repositories {
+        maven { url "https://spinnaker-releases.bintray.com/jars" }
+      }
     }
   }
 }
@@ -41,14 +44,19 @@ allprojects { project ->
     service,
     version,
     sha: pluginSha
-  };
+  }
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64')
   const artifactName = `compat-${runID}-${encodedPayload}`
   if (core.getInput('skip_upload') !== 'true') {
     try {
       core.info(`Uploading dummy artifact ${artifactName}`)
       const artifactClient = create()
-      const response = await artifactClient.uploadArtifact(artifactName, ['init.gradle'], '.', {}) 
+      const response = await artifactClient.uploadArtifact(
+        artifactName,
+        ['init.gradle'],
+        '.',
+        {}
+      )
       if (response.failedItems.length > 0) {
         core.setFailed(`Could not upload artifacts`)
       }

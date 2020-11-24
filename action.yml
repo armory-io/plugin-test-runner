@@ -10,6 +10,9 @@ inputs:
     description: plugin commit to test
   skip_upload:
     default: false
+  timeout_minutes:
+    default: 10
+    description: number of minutes to wait before timeout
 runs:
   using: 'node12'
   main: 'dist/index.js'

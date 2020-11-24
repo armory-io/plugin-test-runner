@@ -725,6 +725,7 @@ function run() {
         const service = core.getInput('service');
         const version = core.getInput('version');
         const pluginSha = core.getInput('plugin_sha');
+        const timeoutMinutes = core.getInput('timeout_minutes') || 10;
         core.info('Received inputs:');
         core.info(`service=${service}`);
         core.info(`version=${version}`);
@@ -741,6 +742,9 @@ allprojects { project ->
       project.dependencies.add("testRuntime", platform)
       project.repositories {
         maven { url "https://spinnaker-releases.bintray.com/jars" }
+      }
+      project.tasks.withType(Test) {
+        timeout = Duration.ofMinutes(${timeoutMinutes})
       }
     }
   }

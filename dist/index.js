@@ -720,6 +720,7 @@ const fs = __importStar(__webpack_require__(747));
 const core = __importStar(__webpack_require__(186));
 const exec_1 = __webpack_require__(514);
 const artifact_1 = __webpack_require__(605);
+const subproject_1 = __webpack_require__(979);
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         const service = core.getInput('service');
@@ -730,6 +731,7 @@ function run() {
         core.info(`service=${service}`);
         core.info(`version=${version}`);
         core.info(`plugin_sha=${pluginSha}`);
+        const subproject = subproject_1.resolveGradleSubproject(service, '.');
         try {
             const initGradle = `
 allprojects { project ->
@@ -752,7 +754,7 @@ allprojects { project ->
 `;
             core.info(`Gradle init script:\n${initGradle}`);
             fs.writeFileSync('init.gradle', initGradle);
-            const command = `./gradlew -I init.gradle test`;
+            const command = `./gradlew -I init.gradle :${subproject}:test`;
             core.info(`Running command: ${command}`);
             yield exec_1.exec(command);
         }
@@ -8872,6 +8874,65 @@ function globUnescape (s) {
 
 function regExpEscape (s) {
   return s.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')
+}
+
+
+/***/ }),
+
+/***/ 979:
+/***/ (function(__unusedmodule, exports, __webpack_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.resolveGradleSubproject = void 0;
+const fs = __importStar(__webpack_require__(747));
+const path = __importStar(__webpack_require__(622));
+exports.resolveGradleSubproject = (service, rootDir) => {
+    const [subproject] = fs
+        .readdirSync(rootDir)
+        .filter(file => fs.lstatSync(path.join(rootDir, file)).isDirectory())
+        .map(dir => {
+        var _a;
+        const gradleFile = fs
+            .readdirSync(path.join(rootDir, dir))
+            .find(file => file.endsWith('.gradle'));
+        if (!gradleFile) {
+            return;
+        }
+        const gradleFileContents = fs.readFileSync(path.join(rootDir, dir, gradleFile), 'utf-8');
+        if ((_a = gradleFileContents
+            .split('\n')
+            .find(line => line.includes('serviceName'))) === null || _a === void 0 ? void 0 : _a.includes(service)) {
+            return gradleFile.substring(0, gradleFile.length - '.gradle'.length);
+        }
+    })
+        .filter(it => !!it);
+    if (!subproject) {
+        throw new SubprojectNotFoundError(`Could not find plugin subproject for ${service}`);
+    }
+    return subproject;
+};
+class SubprojectNotFoundError extends Error {
 }
 
 

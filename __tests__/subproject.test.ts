@@ -3,8 +3,8 @@ import * as path from 'path'
 
 import {resolveGradleSubproject} from '../src/subproject'
 
-test('resolves subproject', async () => {
-  const subproject = await resolveGradleSubproject(
+test('resolves subproject', () => {
+  const subproject = resolveGradleSubproject(
     'clouddriver',
     path.join(__dirname, 'crd-plugin')
   )

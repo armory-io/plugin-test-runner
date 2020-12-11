@@ -2,6 +2,7 @@ import * as fs from 'fs'
 import * as core from '@actions/core'
 import {exec} from '@actions/exec'
 import {create, UploadOptions} from '@actions/artifact'
+import {resolveGradleSubproject} from './subproject'
 
 async function run(): Promise<void> {
   const service = core.getInput('service')
@@ -13,6 +14,8 @@ async function run(): Promise<void> {
   core.info(`service=${service}`)
   core.info(`version=${version}`)
   core.info(`plugin_sha=${pluginSha}`)
+
+  const subproject = resolveGradleSubproject(service, '.')
 
   try {
     const initGradle = `
@@ -36,7 +39,7 @@ allprojects { project ->
 `
     core.info(`Gradle init script:\n${initGradle}`)
     fs.writeFileSync('init.gradle', initGradle)
-    const command = `./gradlew -I init.gradle test`
+    const command = `./gradlew -I init.gradle :${subproject}:test`
     core.info(`Running command: ${command}`)
     await exec(command)
   } catch (error) {

@@ -800,7 +800,7 @@ const uploadArtifact = (service, version, sha, outcome) => __awaiter(void 0, voi
         try {
             core.info(`Uploading dummy artifact ${artifactName}`);
             const artifactClient = artifact_1.create();
-            const response = yield artifactClient.uploadArtifact(artifactName, ['init.gradle'], '.', {});
+            const response = yield artifactClient.uploadArtifact(artifactName, ['gradle.properties'], '.', {});
             if (response.failedItems.length > 0) {
                 core.setFailed(`Could not upload artifacts`);
             }

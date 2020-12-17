@@ -108,7 +108,7 @@ const uploadArtifact = async (
       const artifactClient = create()
       const response = await artifactClient.uploadArtifact(
         artifactName,
-        ['init.gradle'],
+        ['gradle.properties'],
         '.',
         {}
       )

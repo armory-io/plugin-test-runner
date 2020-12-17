@@ -53,7 +53,6 @@ async function run(): Promise<void> {
     version,
     pluginSha,
     outcome,
-    process.env['GITHUB_RUN_ID'] as string
   )
 }
 
@@ -93,8 +92,7 @@ const uploadArtifact = async (
   service: string,
   version: string,
   sha: string,
-  outcome: Outcome,
-  runID: string
+  outcome: Outcome
 ) => {
   const payload = {
     service,
@@ -103,7 +101,7 @@ const uploadArtifact = async (
     outcome
   }
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64')
-  const artifactName = `compat-${runID}-${encodedPayload}`
+  const artifactName = `compat-${encodedPayload}`
   if (core.getInput('skip_upload') !== 'true') {
     try {
       core.info(`Uploading dummy artifact ${artifactName}`)

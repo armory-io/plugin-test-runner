@@ -758,7 +758,7 @@ function run() {
         else {
             outcome = 'unknown';
         }
-        yield uploadArtifact(service, version, pluginSha, outcome, process.env['GITHUB_RUN_ID']);
+        yield uploadArtifact(service, version, pluginSha, outcome);
     });
 }
 const runTests = (service, version, subprojectName, timeoutMinutes) => __awaiter(void 0, void 0, void 0, function* () {
@@ -787,7 +787,7 @@ allprojects { project ->
     core.info(`Running command: ${command}`);
     return yield exec_1.exec(command);
 });
-const uploadArtifact = (service, version, sha, outcome, runID) => __awaiter(void 0, void 0, void 0, function* () {
+const uploadArtifact = (service, version, sha, outcome) => __awaiter(void 0, void 0, void 0, function* () {
     const payload = {
         service,
         version,
@@ -795,7 +795,7 @@ const uploadArtifact = (service, version, sha, outcome, runID) => __awaiter(void
         outcome
     };
     const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64');
-    const artifactName = `compat-${runID}-${encodedPayload}`;
+    const artifactName = `compat-${encodedPayload}`;
     if (core.getInput('skip_upload') !== 'true') {
         try {
             core.info(`Uploading dummy artifact ${artifactName}`);

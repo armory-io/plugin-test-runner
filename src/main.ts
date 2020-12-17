@@ -2,23 +2,68 @@ import * as fs from 'fs'
 import * as core from '@actions/core'
 import {exec} from '@actions/exec'
 import {create, UploadOptions} from '@actions/artifact'
-import {resolveGradleSubproject} from './subproject'
+import {fingerprintProject} from './fingerprint'
+
+type Outcome = 'success' | 'failure' | 'unknown'
 
 async function run(): Promise<void> {
   const service = core.getInput('service')
   const version = core.getInput('version')
   const pluginSha = core.getInput('plugin_sha')
-  const timeoutMinutes = core.getInput('timeout_minutes') || 10
+  const timeoutMinutes = +core.getInput('timeout_minutes') || 10
 
   core.info('Received inputs:')
   core.info(`service=${service}`)
   core.info(`version=${version}`)
   core.info(`plugin_sha=${pluginSha}`)
+  core.info(`timeout_minutes=${timeoutMinutes}`)
 
-  const subproject = resolveGradleSubproject(service, '.')
+  const fingerprint = await fingerprintProject(service)
+  if (!Object.keys(fingerprint).length) {
+    core.warning('Could not fingerprint project')
+  } else {
+    Object.entries(fingerprint).forEach(([key, value]) => {
+      core.info(`[fingerprint] ${key}=${value}`)
+    })
+  }
 
-  try {
-    const initGradle = `
+  let outcome: Outcome = 'success'
+  if (fingerprint.dependsOnPluginsTck) {
+    try {
+      const code = await runTests(
+        service,
+        version,
+        fingerprint.subprojectName,
+        timeoutMinutes
+      )
+      if (code !== 0) {
+        core.setFailed(`Tests exited with code ${code}`)
+        outcome = 'failure'
+      }
+    } catch (error) {
+      core.setFailed(error.message)
+      outcome = 'failure'
+    }
+  } else {
+    outcome = 'unknown'
+  }
+
+  await uploadArtifact(
+    service,
+    version,
+    pluginSha,
+    outcome,
+    process.env['GITHUB_RUN_ID'] as string
+  )
+}
+
+const runTests = async (
+  service: string,
+  version: string,
+  subprojectName: string,
+  timeoutMinutes: number
+): Promise<number> => {
+  const initGradle = `
 allprojects { project ->
   project.afterEvaluate {
     def spinnakerPlugin = project.extensions.findByName("spinnakerPlugin")
@@ -37,20 +82,25 @@ allprojects { project ->
   }
 }
 `
-    core.info(`Gradle init script:\n${initGradle}`)
-    fs.writeFileSync('init.gradle', initGradle)
-    const command = `./gradlew -I init.gradle :${subproject}:test`
-    core.info(`Running command: ${command}`)
-    await exec(command)
-  } catch (error) {
-    core.setFailed(error.message)
-  }
+  core.info(`Gradle init script:\n${initGradle}`)
+  fs.writeFileSync('init.gradle', initGradle)
+  const command = `./gradlew -I init.gradle :${subprojectName}:test`
+  core.info(`Running command: ${command}`)
+  return await exec(command)
+}
 
-  const runID = process.env['GITHUB_RUN_ID']
+const uploadArtifact = async (
+  service: string,
+  version: string,
+  sha: string,
+  outcome: Outcome,
+  runID: string
+) => {
   const payload = {
     service,
     version,
-    sha: pluginSha
+    sha,
+    outcome
   }
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64')
   const artifactName = `compat-${runID}-${encodedPayload}`

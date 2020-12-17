@@ -16,7 +16,11 @@ test('run compatibility test', () => {
 
   try {
     const output = cp.execSync(
-      `npx ts-node ${path.join(__dirname, '..', 'src', 'main.ts')}`,
+      `npx ts-node --project ${path.join(
+        __dirname,
+        '..',
+        'tsconfig.json'
+      )} ${path.join(__dirname, '..', 'src', 'main.ts')}`,
       {
         env: process.env,
         cwd: path.join(testDir, 'crd-plugin')

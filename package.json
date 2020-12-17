@@ -28,6 +28,8 @@
     "@actions/artifact": "^0.4.0",
     "@actions/core": "^1.2.6",
     "@actions/exec": "^1.0.4",
+    "@types/split": "^1.0.0",
+    "split": "^1.0.1",
     "ts-node": "^9.0.0"
   },
   "devDependencies": {

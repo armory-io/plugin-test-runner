@@ -733,18 +733,13 @@ function run() {
         core.info(`plugin_sha=${pluginSha}`);
         core.info(`timeout_minutes=${timeoutMinutes}`);
         const fingerprint = yield fingerprint_1.fingerprintProject(service);
-        if (!Object.keys(fingerprint).length) {
-            core.warning('Could not fingerprint project');
-        }
-        else {
-            Object.entries(fingerprint).forEach(([key, value]) => {
-                core.info(`[fingerprint] ${key}=${value}`);
-            });
-        }
+        Object.entries(fingerprint).forEach(([key, value]) => {
+            core.info(`[fingerprint] ${key}=${value}`);
+        });
         let outcome = 'success';
-        if (fingerprint.dependsOnPluginsTck) {
+        if (fingerprint.success) {
             try {
-                const code = yield runTests(service, version, fingerprint.subprojectName, timeoutMinutes);
+                const code = yield runTests(service, version, fingerprint, timeoutMinutes);
                 if (code !== 0) {
                     core.setFailed(`Tests exited with code ${code}`);
                     outcome = 'failure';
@@ -761,16 +756,13 @@ function run() {
         yield uploadArtifact(service, version, pluginSha, outcome);
     });
 }
-const runTests = (service, version, subprojectName, timeoutMinutes) => __awaiter(void 0, void 0, void 0, function* () {
+const runTests = (service, version, fingerprint, timeoutMinutes) => __awaiter(void 0, void 0, void 0, function* () {
     const initGradle = `
 allprojects { project ->
-  project.afterEvaluate {
-    def spinnakerPlugin = project.extensions.findByName("spinnakerPlugin")
-    if (spinnakerPlugin?.serviceName == "${service}") {
-      def platform = project.dependencies.platform("com.netflix.spinnaker.${service}:${service}-bom:${version}") {
-        force = true
-      }
-      project.dependencies.add("testRuntime", platform)
+  if (project.name == "${fingerprint.subprojectName}") {
+    project.afterEvaluate {
+      def platform = project.dependencies.enforcedPlatform("com.netflix.spinnaker.${service}:${service}-bom:${version}")
+      project.dependencies.add("${fingerprint.testSourceSet}Runtime", platform)
       project.repositories {
         maven { url "https://spinnaker-releases.bintray.com/jars" }
       }
@@ -783,7 +775,7 @@ allprojects { project ->
 `;
     core.info(`Gradle init script:\n${initGradle}`);
     fs.writeFileSync('init.gradle', initGradle);
-    const command = `./gradlew -I init.gradle :${subprojectName}:test`;
+    const command = `./gradlew -I init.gradle :${fingerprint.subprojectName}:${fingerprint.testTask}`;
     core.info(`Running command: ${command}`);
     return yield exec_1.exec(command);
 });
@@ -6259,15 +6251,70 @@ const core = __importStar(__webpack_require__(186));
 const exec_1 = __webpack_require__(514);
 exports.fingerprintProject = (service, projectDir = '.') => __awaiter(void 0, void 0, void 0, function* () {
     const fingerprintGradle = `
+import org.gradle.api.internal.artifacts.dependencies.DefaultProjectDependency
+
 allprojects { project ->
+  def service = "${service}"
+
+  // For projects that implement their own integration tests.
+  project.afterEvaluate {
+    def integrationTestTask = project.tasks.findByName("integrationTest")
+    if (integrationTestTask == null) {
+      return
+    }
+
+    def sourceSets = project.sourceSets.findAll {
+      it.name.contains("integration")
+    }
+    if (sourceSets.size() != 1) {
+      return
+    }
+    def integrationSourceSet = sourceSets.first()
+
+    def testIsForService = true
+    def extension = project.extensions.findByName("spinnakerPlugin")
+    if (extension != null) {
+      if (extension.serviceName != service) {
+        testIsForService = false
+      }
+    } else {
+      def configurationName = "\${integrationSourceSet.name}Implementation"
+      def configuration = project.configurations.findByName(configurationName)
+      if (!configuration) {
+        return
+      }
+      def dependencyProjects = configuration.dependencies.findAll {
+        it instanceof DefaultProjectDependency
+      }
+      if (dependencyProjects.size() != 1) {
+        return
+      }
+      def dependencyProject = dependencyProjects.first().dependencyProject
+      testIsForService = (dependencyProject.extensions.findByName("spinnakerPlugin")?.serviceName == service) ?: false
+    }
+    if (!testIsForService) {
+      project.logger.lifecycle("Test is not for service.")
+      return
+    }
+    
+    project.logger.lifecycle("FINGERPRINT:testTask:integrationTest")
+    project.logger.lifecycle("FINGERPRINT:testSourceSet:\${integrationSourceSet.name}")
+    project.logger.lifecycle("FINGERPRINT:subprojectName:\${project.name}")
+  }
+
+  // For projects that implement integration tests using the plugin TCK.
   project.afterEvaluate {
     def spinnakerPlugin = project.extensions.findByName("spinnakerPlugin")
-    if (spinnakerPlugin?.serviceName == "${service}") {
-      project.logger.lifecycle("FINGERPRINT:subprojectName: \${project.name}")
+    if (spinnakerPlugin?.serviceName == service) {
       def tck = project.configurations.findByName("testImplementation")?.dependencies.find {
         it.name == "kork-plugins-tck" && it.group == "com.netflix.spinnaker.kork"
       }
-      project.logger.lifecycle("FINGERPRINT:dependsOnPluginsTck: \${tck != null}")
+      if (tck == null) {
+        return
+      }
+      project.logger.lifecycle("FINGERPRINT:testTask:test")
+      project.logger.lifecycle("FINGERPRINT:testSourceSet:test")
+      project.logger.lifecycle("FINGERPRINT:subprojectName:\${project.name}")
     }
   }
 }
@@ -6302,6 +6349,10 @@ allprojects { project ->
         fs.unlinkSync(path.join(projectDir, 'fingerprint.gradle'));
         fs.unlinkSync(path.join(projectDir, 'fingerprint.log'));
     }
+    fingerprint.success =
+        !!fingerprint.testTask &&
+            !!fingerprint.subprojectName &&
+            !!fingerprint.testSourceSet;
     return fingerprint;
 });
 const coerce = (str) => {

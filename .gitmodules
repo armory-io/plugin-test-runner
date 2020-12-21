@@ -1,3 +1,6 @@
 [submodule "__tests__/crd-plugin"]
 	path = __tests__/crd-plugin
 	url = git@github.com:danielpeach/armory-crdcheck-plugin.git
+[submodule "__tests__/external-accounts"]
+	path = __tests__/external-accounts
+	url = git@github.com:armory-plugins/external-accounts.git

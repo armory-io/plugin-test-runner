@@ -3,11 +3,22 @@ import * as path from 'path'
 
 import {fingerprintProject} from '../src/fingerprint'
 
-test('fingerprints subproject', async () => {
+test('fingerprints subproject that uses plugin tck', async () => {
   const fingerprint = await fingerprintProject(
     'clouddriver',
     path.join(__dirname, 'crd-plugin')
   )
   expect(fingerprint.subprojectName).toEqual('crdcheck-clouddriver')
-  expect(fingerprint.dependsOnPluginsTck).toEqual(true)
-})
+  expect(fingerprint.testTask).toEqual('test')
+  expect(fingerprint.testSourceSet).toEqual('test')
+}, 10000)
+
+test('fingerprints subproject that has its own integration tests', async () => {
+  const fingerprint = await fingerprintProject(
+    'clouddriver',
+    path.join(__dirname, 'external-accounts')
+  )
+  expect(fingerprint.subprojectName).toEqual('integration-tests')
+  expect(fingerprint.testTask).toEqual('integrationTest')
+  expect(fingerprint.testSourceSet).toEqual('integration')
+}, 10000)

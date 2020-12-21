@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as core from '@actions/core'
 import {exec} from '@actions/exec'
 import {create, UploadOptions} from '@actions/artifact'
-import {fingerprintProject} from './fingerprint'
+import {fingerprintProject, IProjectFingerprint} from './fingerprint'
 
 type Outcome = 'success' | 'failure' | 'unknown'
 
@@ -19,23 +19,14 @@ async function run(): Promise<void> {
   core.info(`timeout_minutes=${timeoutMinutes}`)
 
   const fingerprint = await fingerprintProject(service)
-  if (!Object.keys(fingerprint).length) {
-    core.warning('Could not fingerprint project')
-  } else {
-    Object.entries(fingerprint).forEach(([key, value]) => {
-      core.info(`[fingerprint] ${key}=${value}`)
-    })
-  }
+  Object.entries(fingerprint).forEach(([key, value]) => {
+    core.info(`[fingerprint] ${key}=${value}`)
+  })
 
   let outcome: Outcome = 'success'
-  if (fingerprint.dependsOnPluginsTck) {
+  if (fingerprint.success) {
     try {
-      const code = await runTests(
-        service,
-        version,
-        fingerprint.subprojectName,
-        timeoutMinutes
-      )
+      const code = await runTests(service, version, fingerprint, timeoutMinutes)
       if (code !== 0) {
         core.setFailed(`Tests exited with code ${code}`)
         outcome = 'failure'
@@ -48,29 +39,21 @@ async function run(): Promise<void> {
     outcome = 'unknown'
   }
 
-  await uploadArtifact(
-    service,
-    version,
-    pluginSha,
-    outcome,
-  )
+  await uploadArtifact(service, version, pluginSha, outcome)
 }
 
 const runTests = async (
   service: string,
   version: string,
-  subprojectName: string,
+  fingerprint: IProjectFingerprint,
   timeoutMinutes: number
 ): Promise<number> => {
   const initGradle = `
 allprojects { project ->
-  project.afterEvaluate {
-    def spinnakerPlugin = project.extensions.findByName("spinnakerPlugin")
-    if (spinnakerPlugin?.serviceName == "${service}") {
-      def platform = project.dependencies.platform("com.netflix.spinnaker.${service}:${service}-bom:${version}") {
-        force = true
-      }
-      project.dependencies.add("testRuntime", platform)
+  if (project.name == "${fingerprint.subprojectName}") {
+    project.afterEvaluate {
+      def platform = project.dependencies.enforcedPlatform("com.netflix.spinnaker.${service}:${service}-bom:${version}")
+      project.dependencies.add("${fingerprint.testSourceSet}Runtime", platform)
       project.repositories {
         maven { url "https://spinnaker-releases.bintray.com/jars" }
       }
@@ -83,7 +66,7 @@ allprojects { project ->
 `
   core.info(`Gradle init script:\n${initGradle}`)
   fs.writeFileSync('init.gradle', initGradle)
-  const command = `./gradlew -I init.gradle :${subprojectName}:test`
+  const command = `./gradlew -I init.gradle :${fingerprint.subprojectName}:${fingerprint.testTask}`
   core.info(`Running command: ${command}`)
   return await exec(command)
 }

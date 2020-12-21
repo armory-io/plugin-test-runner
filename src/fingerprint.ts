@@ -5,9 +5,11 @@ import split from 'split'
 import * as core from '@actions/core'
 import {exec} from '@actions/exec'
 
-interface IProjectFingerprint {
-  subprojectName: string
-  dependsOnPluginsTck: boolean
+export interface IProjectFingerprint {
+  success: boolean
+  testTask: string
+  subprojectName: boolean
+  testSourceSet: string
 }
 
 export const fingerprintProject = async (
@@ -15,15 +17,70 @@ export const fingerprintProject = async (
   projectDir = '.'
 ): Promise<IProjectFingerprint> => {
   const fingerprintGradle = `
+import org.gradle.api.internal.artifacts.dependencies.DefaultProjectDependency
+
 allprojects { project ->
+  def service = "${service}"
+
+  // For projects that implement their own integration tests.
+  project.afterEvaluate {
+    def integrationTestTask = project.tasks.findByName("integrationTest")
+    if (integrationTestTask == null) {
+      return
+    }
+
+    def sourceSets = project.sourceSets.findAll {
+      it.name.contains("integration")
+    }
+    if (sourceSets.size() != 1) {
+      return
+    }
+    def integrationSourceSet = sourceSets.first()
+
+    def testIsForService = true
+    def extension = project.extensions.findByName("spinnakerPlugin")
+    if (extension != null) {
+      if (extension.serviceName != service) {
+        testIsForService = false
+      }
+    } else {
+      def configurationName = "\${integrationSourceSet.name}Implementation"
+      def configuration = project.configurations.findByName(configurationName)
+      if (!configuration) {
+        return
+      }
+      def dependencyProjects = configuration.dependencies.findAll {
+        it instanceof DefaultProjectDependency
+      }
+      if (dependencyProjects.size() != 1) {
+        return
+      }
+      def dependencyProject = dependencyProjects.first().dependencyProject
+      testIsForService = (dependencyProject.extensions.findByName("spinnakerPlugin")?.serviceName == service) ?: false
+    }
+    if (!testIsForService) {
+      project.logger.lifecycle("Test is not for service.")
+      return
+    }
+    
+    project.logger.lifecycle("FINGERPRINT:testTask:integrationTest")
+    project.logger.lifecycle("FINGERPRINT:testSourceSet:\${integrationSourceSet.name}")
+    project.logger.lifecycle("FINGERPRINT:subprojectName:\${project.name}")
+  }
+
+  // For projects that implement integration tests using the plugin TCK.
   project.afterEvaluate {
     def spinnakerPlugin = project.extensions.findByName("spinnakerPlugin")
-    if (spinnakerPlugin?.serviceName == "${service}") {
-      project.logger.lifecycle("FINGERPRINT:subprojectName: \${project.name}")
+    if (spinnakerPlugin?.serviceName == service) {
       def tck = project.configurations.findByName("testImplementation")?.dependencies.find {
         it.name == "kork-plugins-tck" && it.group == "com.netflix.spinnaker.kork"
       }
-      project.logger.lifecycle("FINGERPRINT:dependsOnPluginsTck: \${tck != null}")
+      if (tck == null) {
+        return
+      }
+      project.logger.lifecycle("FINGERPRINT:testTask:test")
+      project.logger.lifecycle("FINGERPRINT:testSourceSet:test")
+      project.logger.lifecycle("FINGERPRINT:subprojectName:\${project.name}")
     }
   }
 }
@@ -64,6 +121,11 @@ allprojects { project ->
     fs.unlinkSync(path.join(projectDir, 'fingerprint.gradle'))
     fs.unlinkSync(path.join(projectDir, 'fingerprint.log'))
   }
+
+  fingerprint.success =
+    !!fingerprint.testTask &&
+    !!fingerprint.subprojectName &&
+    !!fingerprint.testSourceSet
   return fingerprint as IProjectFingerprint
 }
 

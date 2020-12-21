@@ -4,34 +4,24 @@ import * as os from 'os'
 import * as path from 'path'
 import * as fs from 'fs'
 
-test('run compatibility test', () => {
-  process.env['INPUT_SERVICE'] = 'clouddriver'
-  process.env['INPUT_VERSION'] = '7.0.0-20201014125147'
-  process.env['INPUT_PLUGIN_SHA'] = '12345abcdef'
-  process.env['INPUT_SKIP_UPLOAD'] = 'true'
-  process.env['GITHUB_RUN_ID'] = '12345'
+test('runs compatibility test for plugin that uses the plugin tck', () => {
+  const env = {...process.env}
+  env['INPUT_SERVICE'] = 'clouddriver'
+  env['INPUT_VERSION'] = '7.0.0-20201014125147'
+  env['INPUT_PLUGIN_SHA'] = '12345abcdef'
+  env['INPUT_SKIP_UPLOAD'] = 'true'
 
-  const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plugin-test'))
-  copyDirectory(path.join(__dirname, 'crd-plugin'), testDir)
+  runner('crd-plugin', env)
+})
 
-  try {
-    const output = cp.execSync(
-      `npx ts-node --project ${path.join(
-        __dirname,
-        '..',
-        'tsconfig.json'
-      )} ${path.join(__dirname, '..', 'src', 'main.ts')}`,
-      {
-        env: process.env,
-        cwd: path.join(testDir, 'crd-plugin')
-      }
-    )
-    console.log(output.toString())
-  } catch (e) {
-    console.log(e.stderr.toString())
-    console.log(e.stdout.toString())
-    expect(e).toBeNull()
-  }
+test('runs compatibility test for plugin that defines its own integration tests', () => {
+  const env = {...process.env}
+  env['INPUT_SERVICE'] = 'clouddriver'
+  env['INPUT_VERSION'] = '7.1.0-20201201170018'
+  env['INPUT_PLUGIN_SHA'] = '12345abcdef'
+  env['INPUT_SKIP_UPLOAD'] = 'true'
+
+  runner('external-accounts', env)
 })
 
 const copyFile = (source: string, target: string) => {
@@ -58,5 +48,45 @@ const copyDirectory = (source: string, target: string) => {
         copyFile(curSource, targetFolder)
       }
     })
+  }
+}
+
+const deleteFolderRecursive = (dir: string) => {
+  if (fs.existsSync(dir)) {
+    fs.readdirSync(dir).forEach(file => {
+      const curPath = path.join(dir, file)
+      if (fs.lstatSync(curPath).isDirectory()) {
+        deleteFolderRecursive(curPath)
+      } else {
+        fs.unlinkSync(curPath)
+      }
+    })
+    fs.rmdirSync(dir)
+  }
+}
+
+const runner = (plugin: string, env: any) => {
+  const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plugin-test'))
+  copyDirectory(path.join(__dirname, plugin), testDir)
+
+  try {
+    const output = cp.execSync(
+      `npx ts-node --project ${path.join(
+        __dirname,
+        '..',
+        'tsconfig.json'
+      )} ${path.join(__dirname, '..', 'src', 'main.ts')}`,
+      {
+        env,
+        cwd: path.join(testDir, plugin)
+      }
+    )
+    console.log(output.toString())
+  } catch (e) {
+    console.log(e.stderr.toString())
+    console.log(e.stdout.toString())
+    expect(e).toBeNull()
+  } finally {
+    deleteFolderRecursive(testDir)
   }
 }

@@ -49,14 +49,11 @@ allprojects { project ->
       if (!configuration) {
         return
       }
-      def dependencyProjects = configuration.dependencies.findAll {
+      testIsForService = configuration.dependencies.findAll {
         it instanceof DefaultProjectDependency
-      }
-      if (dependencyProjects.size() != 1) {
-        return
-      }
-      def dependencyProject = dependencyProjects.first().dependencyProject
-      testIsForService = (dependencyProject.extensions.findByName("spinnakerPlugin")?.serviceName == service) ?: false
+      }.findResults {
+        it.extensions.findByName("spinnakerPlugin")?.serviceName == service
+      }.size() > 0
     }
     if (!testIsForService) {
       project.logger.lifecycle("Test is not for service.")

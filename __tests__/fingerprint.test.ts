@@ -22,3 +22,11 @@ test('fingerprints subproject that has its own integration tests', async () => {
   expect(fingerprint.testTask).toEqual('integrationTest')
   expect(fingerprint.testSourceSet).toEqual('integration')
 }, 10000)
+
+test("fingerprint fails if the plugin's integration tests do not test the requested service", async () => {
+  const fingerprint = await fingerprintProject(
+    'fiat',
+    path.join(__dirname, 'external-accounts')
+  )
+  expect(fingerprint.success).toEqual(false)
+}, 10000)

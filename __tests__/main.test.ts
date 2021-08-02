@@ -10,6 +10,7 @@ test('runs compatibility test for plugin that uses the plugin tck', () => {
   env['INPUT_VERSION'] = '7.0.0-20201014125147'
   env['INPUT_PLUGIN_SHA'] = '12345abcdef'
   env['INPUT_SKIP_UPLOAD'] = 'true'
+  env['GRADLE_ARGS'] = ''
 
   runner('crd-plugin', env)
 })

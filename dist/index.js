@@ -93,7 +93,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const fs = __importStar(__webpack_require__(747));
 const core = __importStar(__webpack_require__(186));
 const exec_1 = __webpack_require__(514);
-const fingerprint_1 = __webpack_require__(910);
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         const service = core.getInput('service');
@@ -105,50 +104,36 @@ function run() {
         core.info(`version=${version}`);
         core.info(`plugin_sha=${pluginSha}`);
         core.info(`timeout_minutes=${timeoutMinutes}`);
-        const fingerprint = yield fingerprint_1.fingerprintProject(service);
-        Object.entries(fingerprint).forEach(([key, value]) => {
-            core.info(`[fingerprint] ${key}=${value}`);
-        });
-        let outcome = 'success';
-        if (fingerprint.success) {
-            try {
-                const code = yield runTests(service, version, fingerprint, timeoutMinutes);
-                if (code !== 0) {
-                    core.setFailed(`Tests exited with code ${code}`);
-                    outcome = 'failure';
-                }
-            }
-            catch (error) {
-                core.setFailed(error.message);
-                outcome = 'failure';
+        try {
+            const code = yield runTests(service, version, timeoutMinutes);
+            if (code !== 0) {
+                core.setFailed(`Tests exited with code ${code}`);
             }
         }
-        else {
-            outcome = 'noFingerprint';
+        catch (error) {
+            core.setFailed(error.message);
         }
-        core.setOutput('TEST_OUTCOME', outcome);
     });
 }
-const runTests = (service, version, fingerprint, timeoutMinutes) => __awaiter(void 0, void 0, void 0, function* () {
+const runTests = (service, version, timeoutMinutes) => __awaiter(void 0, void 0, void 0, function* () {
     const initGradle = `
 allprojects { project ->
-  if (project.name == "${fingerprint.subprojectName}") {
-    project.afterEvaluate {
+  project.afterEvaluate {
+    def spinnakerPlugin = project.extensions.findByName("spinnakerPlugin")
+    if (spinnakerPlugin?.serviceName == "${service}") {
       def platform = project.dependencies.enforcedPlatform("io.spinnaker.${service}:${service}-bom:${version}")
-      project.dependencies.add("${fingerprint.testSourceSet}Runtime", platform)
-      project.repositories {
-        maven { url "https://spinnaker-releases.bintray.com/jars" }
-      }
+      project.dependencies.add("testRuntime", platform)
       project.tasks.withType(Test) {
         timeout = Duration.ofMinutes(${timeoutMinutes})
       }
+      task integTest(type: Test)
     }
   }
 }
 `;
     core.info(`Gradle init script:\n${initGradle}`);
     fs.writeFileSync('init.gradle', initGradle);
-    const command = `./gradlew -I init.gradle :${fingerprint.subprojectName}:${fingerprint.testTask} $GRADLE_ARGS`;
+    const command = `./gradlew -I init.gradle clean integTest $GRADLE_ARGS`;
     core.info(`Running command: ${command}`);
     return yield exec_1.exec(command);
 });
@@ -1042,13 +1027,6 @@ exports.toCommandValue = toCommandValue;
 
 /***/ }),
 
-/***/ 304:
-/***/ (function(module) {
-
-module.exports = require("string_decoder");
-
-/***/ }),
-
 /***/ 351:
 /***/ (function(__unusedmodule, exports, __webpack_require__) {
 
@@ -1135,202 +1113,10 @@ function escapeProperty(s) {
 
 /***/ }),
 
-/***/ 354:
-/***/ (function(module, __unusedexports, __webpack_require__) {
-
-//filter will reemit the data if cb(err,pass) pass is truthy
-
-// reduce is more tricky
-// maybe we want to group the reductions or emit progress updates occasionally
-// the most basic reduce just emits one 'data' event after it has recieved 'end'
-
-
-var through = __webpack_require__(421)
-var Decoder = __webpack_require__(304).StringDecoder
-
-module.exports = split
-
-//TODO pass in a function to map across the lines.
-
-function split (matcher, mapper, options) {
-  var decoder = new Decoder()
-  var soFar = ''
-  var maxLength = options && options.maxLength;
-  var trailing = options && options.trailing === false ? false : true
-  if('function' === typeof matcher)
-    mapper = matcher, matcher = null
-  if (!matcher)
-    matcher = /\r?\n/
-
-  function emit(stream, piece) {
-    if(mapper) {
-      try {
-        piece = mapper(piece)
-      }
-      catch (err) {
-        return stream.emit('error', err)
-      }
-      if('undefined' !== typeof piece)
-        stream.queue(piece)
-    }
-    else
-      stream.queue(piece)
-  }
-
-  function next (stream, buffer) {
-    var pieces = ((soFar != null ? soFar : '') + buffer).split(matcher)
-    soFar = pieces.pop()
-
-    if (maxLength && soFar.length > maxLength)
-      return stream.emit('error', new Error('maximum buffer reached'))
-
-    for (var i = 0; i < pieces.length; i++) {
-      var piece = pieces[i]
-      emit(stream, piece)
-    }
-  }
-
-  return through(function (b) {
-    next(this, decoder.write(b))
-  },
-  function () {
-    if(decoder.end)
-      next(this, decoder.end())
-    if(trailing && soFar != null)
-      emit(this, soFar)
-    this.queue(null)
-  })
-}
-
-
-/***/ }),
-
 /***/ 357:
 /***/ (function(module) {
 
 module.exports = require("assert");
-
-/***/ }),
-
-/***/ 413:
-/***/ (function(module) {
-
-module.exports = require("stream");
-
-/***/ }),
-
-/***/ 421:
-/***/ (function(module, exports, __webpack_require__) {
-
-var Stream = __webpack_require__(413)
-
-// through
-//
-// a stream that does nothing but re-emit the input.
-// useful for aggregating a series of changing but not ending streams into one stream)
-
-exports = module.exports = through
-through.through = through
-
-//create a readable writable stream.
-
-function through (write, end, opts) {
-  write = write || function (data) { this.queue(data) }
-  end = end || function () { this.queue(null) }
-
-  var ended = false, destroyed = false, buffer = [], _ended = false
-  var stream = new Stream()
-  stream.readable = stream.writable = true
-  stream.paused = false
-
-//  stream.autoPause   = !(opts && opts.autoPause   === false)
-  stream.autoDestroy = !(opts && opts.autoDestroy === false)
-
-  stream.write = function (data) {
-    write.call(this, data)
-    return !stream.paused
-  }
-
-  function drain() {
-    while(buffer.length && !stream.paused) {
-      var data = buffer.shift()
-      if(null === data)
-        return stream.emit('end')
-      else
-        stream.emit('data', data)
-    }
-  }
-
-  stream.queue = stream.push = function (data) {
-//    console.error(ended)
-    if(_ended) return stream
-    if(data === null) _ended = true
-    buffer.push(data)
-    drain()
-    return stream
-  }
-
-  //this will be registered as the first 'end' listener
-  //must call destroy next tick, to make sure we're after any
-  //stream piped from here.
-  //this is only a problem if end is not emitted synchronously.
-  //a nicer way to do this is to make sure this is the last listener for 'end'
-
-  stream.on('end', function () {
-    stream.readable = false
-    if(!stream.writable && stream.autoDestroy)
-      process.nextTick(function () {
-        stream.destroy()
-      })
-  })
-
-  function _end () {
-    stream.writable = false
-    end.call(stream)
-    if(!stream.readable && stream.autoDestroy)
-      stream.destroy()
-  }
-
-  stream.end = function (data) {
-    if(ended) return
-    ended = true
-    if(arguments.length) stream.write(data)
-    _end() // will emit or queue
-    return stream
-  }
-
-  stream.destroy = function () {
-    if(destroyed) return
-    destroyed = true
-    ended = true
-    buffer.length = 0
-    stream.writable = stream.readable = false
-    stream.emit('close')
-    return stream
-  }
-
-  stream.pause = function () {
-    if(stream.paused) return
-    stream.paused = true
-    return stream
-  }
-
-  stream.resume = function () {
-    if(stream.paused) {
-      stream.paused = false
-      stream.emit('resume')
-    }
-    drain()
-    //may have become paused again,
-    //as drain emits 'data'.
-    if(!stream.paused)
-      stream.emit('drain')
-    return stream
-  }
-  return stream
-}
-
-
 
 /***/ }),
 
@@ -1743,167 +1529,6 @@ exports.issueCommand = issueCommand;
 /***/ (function(module) {
 
 module.exports = require("fs");
-
-/***/ }),
-
-/***/ 910:
-/***/ (function(__unusedmodule, exports, __webpack_require__) {
-
-"use strict";
-
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.fingerprintProject = void 0;
-const fs = __importStar(__webpack_require__(747));
-const path = __importStar(__webpack_require__(622));
-const split_1 = __importDefault(__webpack_require__(354));
-const core = __importStar(__webpack_require__(186));
-const exec_1 = __webpack_require__(514);
-exports.fingerprintProject = (service, projectDir = '.') => __awaiter(void 0, void 0, void 0, function* () {
-    const fingerprintGradle = `
-import org.gradle.api.internal.artifacts.dependencies.DefaultProjectDependency
-
-allprojects { project ->
-  def service = "${service}"
-
-  // For projects that implement their own integration tests.
-  project.afterEvaluate {
-    def integrationTestTask = project.tasks.findByName("integrationTest")
-    if (integrationTestTask == null) {
-      return
-    }
-
-    def sourceSets = project.sourceSets.findAll {
-      it.name.contains("integration")
-    }
-    if (sourceSets.size() != 1) {
-      return
-    }
-    def integrationSourceSet = sourceSets.first()
-
-    def testIsForService = true
-    def extension = project.extensions.findByName("spinnakerPlugin")
-    if (extension != null) {
-      if (extension.serviceName != service) {
-        testIsForService = false
-      }
-    } else {
-      def configurationName = "\${integrationSourceSet.name}Implementation"
-      def configuration = project.configurations.findByName(configurationName)
-      if (!configuration) {
-        return
-      }
-      def dependencyProjects = configuration.dependencies.findAll {
-        it instanceof DefaultProjectDependency
-      }
-      testIsForService = dependencyProjects.any { 
-        it.dependencyProject.extensions.findByName("spinnakerPlugin")?.serviceName == service
-      }
-    }
-    if (!testIsForService) {
-      project.logger.lifecycle("Test is not for service.")
-      return
-    }
-    
-    project.logger.lifecycle("FINGERPRINT:testTask:integrationTest")
-    project.logger.lifecycle("FINGERPRINT:testSourceSet:\${integrationSourceSet.name}")
-    project.logger.lifecycle("FINGERPRINT:subprojectName:\${project.name}")
-  }
-
-  // For projects that implement integration tests using the plugin TCK.
-  project.afterEvaluate {
-    def spinnakerPlugin = project.extensions.findByName("spinnakerPlugin")
-    if (spinnakerPlugin?.serviceName == service) {
-      def tck = project.configurations.findByName("testImplementation")?.dependencies.find {
-        it.name == "kork-plugins-tck" && it.group == "io.spinnaker.kork"
-      }
-      if (tck == null) {
-        return
-      }
-      project.logger.lifecycle("FINGERPRINT:testTask:test")
-      project.logger.lifecycle("FINGERPRINT:testSourceSet:test")
-      project.logger.lifecycle("FINGERPRINT:subprojectName:\${project.name}")
-    }
-  }
-}
-`;
-    core.info(`Gradle fingerprint script:\n${fingerprintGradle}`);
-    fs.writeFileSync(path.join(projectDir, 'fingerprint.gradle'), fingerprintGradle);
-    const fingerprint = {};
-    try {
-        yield exec_1.exec('./gradlew -I fingerprint.gradle $GRADLE_ARGS', [], {
-            cwd: projectDir,
-            outStream: fs.createWriteStream(path.join(projectDir, 'fingerprint.log'))
-        });
-        const logStream = fs
-            .createReadStream(path.join(projectDir, 'fingerprint.log'))
-            .pipe(split_1.default());
-        yield new Promise((resolve, reject) => {
-            logStream.on('data', (line) => {
-                if (line.includes('FINGERPRINT:')) {
-                    line = line.substring(line.lastIndexOf('FINGERPRINT:') + 'FINGERPRINT:'.length);
-                    const [key, value] = line.split(':').map(el => coerce(el.trim()));
-                    fingerprint[key] = value;
-                }
-            });
-            logStream.on('end', resolve);
-            logStream.on('error', reject);
-        });
-    }
-    catch (e) {
-        throw e;
-    }
-    finally {
-        fs.unlinkSync(path.join(projectDir, 'fingerprint.gradle'));
-        fs.unlinkSync(path.join(projectDir, 'fingerprint.log'));
-    }
-    fingerprint.success =
-        !!fingerprint.testTask &&
-            !!fingerprint.subprojectName &&
-            !!fingerprint.testSourceSet;
-    return fingerprint;
-});
-const coerce = (str) => {
-    switch (str) {
-        case 'true':
-            return true;
-        case 'false':
-            return false;
-        default:
-            return str;
-    }
-};
-
 
 /***/ }),
 

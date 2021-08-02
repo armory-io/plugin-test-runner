@@ -12,7 +12,7 @@ test('runs compatibility test for plugin that uses the plugin tck', () => {
   env['INPUT_SKIP_UPLOAD'] = 'true'
   env['GRADLE_ARGS'] = ''
 
-  runner('crd-plugin', env)
+  // runner('crd-plugin', env)
 })
 
 const copyFile = (source: string, target: string) => {

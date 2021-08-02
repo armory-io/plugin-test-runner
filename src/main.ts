@@ -35,7 +35,7 @@ const runTests = async (
 allprojects { project ->
   project.afterEvaluate {
     def spinnakerPlugin = project.extensions.findByName("spinnakerPlugin")
-    if (spinnakerPlugin?.serviceName == "${service}") {
+    if ("${service}" == spinnakerPlugin?.serviceName) {
       def platform = project.dependencies.enforcedPlatform("io.spinnaker.${service}:${service}-bom:${version}")
       project.dependencies.add("testRuntime", platform)
       project.tasks.withType(Test) {
@@ -48,7 +48,7 @@ allprojects { project ->
 `
   core.info(`Gradle init script:\n${initGradle}`)
   fs.writeFileSync('init.gradle', initGradle)
-  const command = `./gradlew -I init.gradle clean integTest $GRADLE_ARGS`
+  const command = `./gradlew -I init.gradle clean integTest`
   core.info(`Running command: ${command}`)
   return await exec(command)
 }

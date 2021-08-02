@@ -1861,7 +1861,7 @@ allprojects { project ->
     fs.writeFileSync(path.join(projectDir, 'fingerprint.gradle'), fingerprintGradle);
     const fingerprint = {};
     try {
-        yield exec_1.exec('./gradlew', ['-I', 'fingerprint.gradle'], {
+        yield exec_1.exec('./gradlew -I fingerprint.gradle $GRADLE_ARGS', [], {
             cwd: projectDir,
             outStream: fs.createWriteStream(path.join(projectDir, 'fingerprint.log'))
         });

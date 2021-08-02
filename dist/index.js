@@ -152,7 +152,7 @@ allprojects { project ->
     core.info(`Running command: ${command}`);
     return yield exec_1.exec(command);
 });
-run();
+run().catch(error => console.log(error));
 
 
 /***/ }),

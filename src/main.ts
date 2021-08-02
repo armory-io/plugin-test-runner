@@ -69,4 +69,4 @@ allprojects { project ->
   return await exec(command)
 }
 
-run()
+run().catch(error => console.log(error))

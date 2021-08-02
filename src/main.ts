@@ -1,10 +1,9 @@
 import * as fs from 'fs'
 import * as core from '@actions/core'
 import {exec} from '@actions/exec'
-import {create, UploadOptions} from '@actions/artifact'
 import {fingerprintProject, IProjectFingerprint} from './fingerprint'
 
-type Outcome = 'success' | 'failure' | 'unknown'
+type Outcome = 'success' | 'failure' | 'noFingerprint'
 
 async function run(): Promise<void> {
   const service = core.getInput('service')
@@ -36,10 +35,9 @@ async function run(): Promise<void> {
       outcome = 'failure'
     }
   } else {
-    outcome = 'unknown'
+    outcome = 'noFingerprint'
   }
-
-  await uploadArtifact(service, version, pluginSha, outcome)
+  core.setOutput('TEST_OUTCOME', outcome)
 }
 
 const runTests = async (
@@ -52,7 +50,7 @@ const runTests = async (
 allprojects { project ->
   if (project.name == "${fingerprint.subprojectName}") {
     project.afterEvaluate {
-      def platform = project.dependencies.enforcedPlatform("com.netflix.spinnaker.${service}:${service}-bom:${version}")
+      def platform = project.dependencies.enforcedPlatform("io.spinnaker.${service}:${service}-bom:${version}")
       project.dependencies.add("${fingerprint.testSourceSet}Runtime", platform)
       project.repositories {
         maven { url "https://spinnaker-releases.bintray.com/jars" }
@@ -66,46 +64,9 @@ allprojects { project ->
 `
   core.info(`Gradle init script:\n${initGradle}`)
   fs.writeFileSync('init.gradle', initGradle)
-  const command = `./gradlew -I init.gradle :${fingerprint.subprojectName}:${fingerprint.testTask}`
+  const command = `./gradlew -I init.gradle :${fingerprint.subprojectName}:${fingerprint.testTask} $GRADLE_ARGS`
   core.info(`Running command: ${command}`)
   return await exec(command)
-}
-
-const uploadArtifact = async (
-  service: string,
-  version: string,
-  sha: string,
-  outcome: Outcome
-) => {
-  const payload = {
-    service,
-    version,
-    sha,
-    outcome
-  }
-  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64')
-  const artifactName = `compat-${encodedPayload}`
-  if (core.getInput('skip_upload') !== 'true') {
-    try {
-      core.info(`Uploading dummy artifact ${artifactName}`)
-      const artifactClient = create()
-      const response = await artifactClient.uploadArtifact(
-        artifactName,
-        ['gradle.properties'],
-        '.',
-        {}
-      )
-      if (response.failedItems.length > 0) {
-        core.setFailed(`Could not upload artifacts`)
-      }
-    } catch (error) {
-      core.setFailed(error.message)
-    }
-  } else {
-    core.info('Not in a CI environment')
-    core.info(`Raw payload is: \n${JSON.stringify(payload, null, 2)}`)
-    core.info(`Would have uploaded a artifact with the name '${artifactName}'`)
-  }
 }
 
 run()

@@ -71,7 +71,7 @@ allprojects { project ->
     def spinnakerPlugin = project.extensions.findByName("spinnakerPlugin")
     if (spinnakerPlugin?.serviceName == service) {
       def tck = project.configurations.findByName("testImplementation")?.dependencies.find {
-        it.name == "kork-plugins-tck" && it.group == "com.netflix.spinnaker.kork"
+        it.name == "kork-plugins-tck" && it.group == "io.spinnaker.kork"
       }
       if (tck == null) {
         return

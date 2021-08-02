@@ -1,7 +1,6 @@
 import * as fs from 'fs'
 import * as core from '@actions/core'
 import {exec} from '@actions/exec'
-import {fingerprintProject, IProjectFingerprint} from './fingerprint'
 
 type Outcome = 'success' | 'failure' | 'noFingerprint'
 
@@ -17,54 +16,39 @@ async function run(): Promise<void> {
   core.info(`plugin_sha=${pluginSha}`)
   core.info(`timeout_minutes=${timeoutMinutes}`)
 
-  const fingerprint = await fingerprintProject(service)
-  Object.entries(fingerprint).forEach(([key, value]) => {
-    core.info(`[fingerprint] ${key}=${value}`)
-  })
-
-  let outcome: Outcome = 'success'
-  if (fingerprint.success) {
-    try {
-      const code = await runTests(service, version, fingerprint, timeoutMinutes)
-      if (code !== 0) {
-        core.setFailed(`Tests exited with code ${code}`)
-        outcome = 'failure'
-      }
-    } catch (error) {
-      core.setFailed(error.message)
-      outcome = 'failure'
+  try {
+    const code = await runTests(service, version, timeoutMinutes)
+    if (code !== 0) {
+      core.setFailed(`Tests exited with code ${code}`)
     }
-  } else {
-    outcome = 'noFingerprint'
+  } catch (error) {
+    core.setFailed(error.message)
   }
-  core.setOutput('TEST_OUTCOME', outcome)
 }
 
 const runTests = async (
   service: string,
   version: string,
-  fingerprint: IProjectFingerprint,
   timeoutMinutes: number
 ): Promise<number> => {
   const initGradle = `
 allprojects { project ->
-  if (project.name == "${fingerprint.subprojectName}") {
-    project.afterEvaluate {
+  project.afterEvaluate {
+    def spinnakerPlugin = project.extensions.findByName("spinnakerPlugin")
+    if (spinnakerPlugin?.serviceName == "${service}") {
       def platform = project.dependencies.enforcedPlatform("io.spinnaker.${service}:${service}-bom:${version}")
-      project.dependencies.add("${fingerprint.testSourceSet}Runtime", platform)
-      project.repositories {
-        maven { url "https://spinnaker-releases.bintray.com/jars" }
-      }
+      project.dependencies.add("testRuntime", platform)
       project.tasks.withType(Test) {
         timeout = Duration.ofMinutes(${timeoutMinutes})
       }
+      task integTest(type: Test)
     }
   }
 }
 `
   core.info(`Gradle init script:\n${initGradle}`)
   fs.writeFileSync('init.gradle', initGradle)
-  const command = `./gradlew -I init.gradle :${fingerprint.subprojectName}:${fingerprint.testTask} $GRADLE_ARGS`
+  const command = `./gradlew -I init.gradle clean integTest $GRADLE_ARGS`
   core.info(`Running command: ${command}`)
   return await exec(command)
 }

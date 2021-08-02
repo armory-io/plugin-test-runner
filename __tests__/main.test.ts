@@ -14,15 +14,15 @@ test('runs compatibility test for plugin that uses the plugin tck', () => {
   runner('crd-plugin', env)
 })
 
-test('runs compatibility test for plugin that defines its own integration tests', () => {
-  const env = {...process.env}
-  env['INPUT_SERVICE'] = 'clouddriver'
-  env['INPUT_VERSION'] = '7.1.0-20201201170018'
-  env['INPUT_PLUGIN_SHA'] = '12345abcdef'
-  env['INPUT_SKIP_UPLOAD'] = 'true'
+// test('runs compatibility test for plugin that defines its own integration tests', () => {
+//   const env = {...process.env}
+//   env['INPUT_SERVICE'] = 'clouddriver'
+//   env['INPUT_VERSION'] = '7.1.0-20201201170018'
+//   env['INPUT_PLUGIN_SHA'] = '12345abcdef'
+//   env['INPUT_SKIP_UPLOAD'] = 'true'
 
-  runner('external-accounts', env)
-})
+//   runner('external-accounts', env)
+// })
 
 const copyFile = (source: string, target: string) => {
   if (fs.existsSync(target) && fs.lstatSync(target).isDirectory()) {

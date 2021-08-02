@@ -91,7 +91,7 @@ allprojects { project ->
 
   const fingerprint: any = {}
   try {
-    await exec('./gradlew -I fingerprint.gradle \$GRADLE_ARGS'], {
+    await exec('./gradlew -I fingerprint.gradle $GRADLE_ARGS', [], {
       cwd: projectDir,
       outStream: fs.createWriteStream(path.join(projectDir, 'fingerprint.log'))
     })
